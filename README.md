@@ -2,23 +2,19 @@
 
 AppModel-Runtime 事件 57／61、TWinUI 事件 5961、`0x80070005` 存取被拒、「應用程式未啟動」`0x8027025B` 的完整排查紀錄、主因與修復
 
-| 項目 | 內容 |
-|---|---|
-| 狀態 | 在一台機器上修好：Microsoft Store、計算機、相片已實際開啟確認；鬧鐘、便利貼、相機只確認修復腳本跑完，**尚未實際開啟**。**尚未在其他機器驗證** |
-| 系統 | Windows 10 專業版 22H2，build 19045。發生在「重設此電腦（雲端下載、全部移除）」之後 |
-| 期間 | 2026-10-24 至 2026-10-29（台灣時間，UTC+8） |
-| 參與者 | 使用者、Claude（Anthropic）、Grok（xAI）。每一段分析都標明出自誰，見 [08](docs/08-who-said-what.md) |
-| 修復涉及 | `C:\Program Files\WindowsApps` 底下的資料夾權限。動手前請先讀 [4.0](#40-開始之前) |
-| 授權 | © 2026 contributors。文件 CC BY 4.0，腳本 MIT，見 [DOCS-LICENSE.md](DOCS-LICENSE.md)、[LICENSE](LICENSE) |
+- **狀態**：在一台機器上修好：Microsoft Store、計算機、相片已實際開啟確認；鬧鐘、便利貼、相機只確認修復腳本跑完，**尚未實際開啟**。**尚未在其他機器驗證**
+- **系統**：Windows 10 專業版 22H2，build 19045。發生在「重設此電腦（雲端下載、全部移除）」之後
+- **期間**：2026-10-24 至 2026-10-29（台灣時間，UTC+8）
+- **參與者**：使用者、Claude（Anthropic）、Grok（xAI）。每一段分析都標明出自誰，見 [08](docs/08-who-said-what.md)
+- **修復涉及**：`C:\Program Files\WindowsApps` 底下的資料夾權限。動手前請先讀 [4.0](#40-開始之前)
+- **授權**：文件（`README.md` 與 `docs/`）採 CC BY 4.0，見 [LICENSE](LICENSE)；腳本與工具（`scripts/`、`tools/`）採 MIT，見 [LICENSE-CODE](LICENSE-CODE)。GitHub 側欄會同時列出這兩個授權。版權 © 2026 contributors
 
 ## 先看這裡（30 秒版）
 
-| 你想知道 | 答案 |
-|---|---|
-| 發生了什麼 | 重設之後，Store、計算機、相片、鬧鐘、相機、便利貼，連主機板廠商的 Armoury Crate 都一樣：點下去閃一下就消失，或在設定裡顯示未安裝。系統檔案、磁碟、記憶體檢查都正常，`Get-AppxPackage` 還說它們是 `Ok` |
-| 主因 | 兩層權限缺口。**錯誤 A**：App 依賴的「框架資料夾」（`WindowsApps` 底下的 `Microsoft.UI.Xaml.2.8`、`Microsoft.NET.Native.Framework.2.2`、`Microsoft.VCLibs.140.00` 等）沒有給 `BUILTIN\Users` 任何權限條目，系統用你的身分去檢查它時被拒，App 連程序都建立不了。**錯誤 B**：A 補好後，依賴 .NET Native 的 App 仍起不來，因為 App 在沙箱裡讀不到框架的 DLL，另外 x64 的 .NET Native 套件曾被 Gaming Services 占住而註冊不上 |
-| 怎麼確認跟我一樣 | 看事件 57／61／5961，對照框架資料夾與正常 App 資料夾的權限，再用 Process Monitor 抓 `ACCESS DENIED`。完整八項檢查見 [三](#三怎麼判斷是不是跟我一模一樣) |
-| 怎麼修 | 對被指到的框架資料夾：備份權限 → `takeown /a /r /d y` → `icacls /grant *S-1-5-32-545:(OI)(CI)(RX)`。B 再加 ALL APPLICATION PACKAGES、註冊框架、清 App 的使用者資料。完整步驟見 [四](#四怎麼解決) |
+- **發生了什麼**：重設之後，Store、計算機、相片、鬧鐘、相機、便利貼，連主機板廠商的 Armoury Crate 都一樣：點下去閃一下就消失，或在設定裡顯示未安裝。系統檔案、磁碟、記憶體檢查都正常，`Get-AppxPackage` 還說它們是 `Ok`
+- **主因**：兩層權限缺口。**錯誤 A**：App 依賴的「框架資料夾」（`WindowsApps` 底下的 `Microsoft.UI.Xaml.2.8`、`Microsoft.NET.Native.Framework.2.2`、`Microsoft.VCLibs.140.00` 等）沒有給 `BUILTIN\Users` 任何權限條目，系統用你的身分去檢查它時被拒，App 連程序都建立不了。**錯誤 B**：A 補好後，依賴 .NET Native 的 App 仍起不來，因為 App 在沙箱裡讀不到框架的 DLL，另外 x64 的 .NET Native 套件曾被 Gaming Services 占住而註冊不上
+- **怎麼確認跟我一樣**：看事件 57／61／5961，對照框架資料夾與正常 App 資料夾的權限，再用 Process Monitor 抓 `ACCESS DENIED`。完整八項檢查見 [三](#三怎麼判斷是不是跟我一模一樣)
+- **怎麼修**：對被指到的框架資料夾：備份權限 → `takeown /a /r /d y` → `icacls /grant *S-1-5-32-545:(OI)(CI)(RX)`。B 再加 ALL APPLICATION PACKAGES、註冊框架、清 App 的使用者資料。完整步驟見 [四](#四怎麼解決)
 
 ## English summary
 
@@ -573,9 +569,18 @@ icacls "<框架資料夾>" /setowner "<步驟 1 記下的擁有者>" /T /C
 
 ### 授權
 
-- © 2026 windows10-store-apps-wont-open-after-reset contributors。
-- **文件**（`README.md` 與 `docs/`）：CC BY 4.0，見 [DOCS-LICENSE.md](DOCS-LICENSE.md)。轉載或改作請標示出處。
-- **腳本與工具**（`scripts/`、`tools/`）：MIT，見 [LICENSE](LICENSE)。`scripts/Fix-UWP-Calculator.ps1` 由 Grok 產生，隨本專案以 MIT 發佈。
+本專案有**兩份授權，分別適用於不同的檔案**。兩份都放在根目錄，GitHub 側欄會同時列出：
+
+| 授權檔 | 適用於 | 授權 |
+|---|---|---|
+| [`LICENSE`](LICENSE) | 文件：`README.md` 與 `docs/` 底下所有 `.md` | CC BY 4.0（創用 CC 姓名標示 4.0 國際） |
+| [`LICENSE-CODE`](LICENSE-CODE) | 程式碼：`scripts/` 與 `tools/` 底下所有檔案 | MIT |
+
+- 版權：© 2026 windows10-store-apps-wont-open-after-reset contributors。
+- **轉載或改作文件**：請依 CC BY 4.0 標示出處，寫上上面的版權人名稱、附上本專案連結與[授權連結](https://creativecommons.org/licenses/by/4.0/deed.zh-hant)，並註明是否做過修改。
+- **使用或改作程式碼**：請保留 `LICENSE-CODE` 的版權與授權聲明。
+- `scripts/Fix-UWP-Calculator.ps1` 由 Grok（xAI）產生，隨本專案以 MIT 發佈。
+- 不確定某個檔案適用哪一份時：`scripts/` 與 `tools/` 底下是 MIT，其餘都是 CC BY 4.0。兩份授權的適用範圍以上表為準。
 
 ### 隱私
 
@@ -593,4 +598,32 @@ icacls "<框架資料夾>" /setowner "<步驟 1 記下的擁有者>" /T /C
 
 如果你遇到相同的症狀，不論修好或沒修好，歡迎開 issue，並附上 [`Detect-FrameworkFolderAcl.ps1`](scripts/Detect-FrameworkFolderAcl.ps1) 的輸出。這個案例目前只有一台機器的證據。
 
-本文最後更新：2026-11-07。
+本文最後更新：2026-11-13。
+
+---
+
+## 後記（2026 年 11 月 13 日）
+
+這一段和前面的技術內容無關，是我寫完這份紀錄之後，個人的感想。
+
+2026 年 11 月 12 日，輝達宣布黃仁勳辭去總裁、執行長與董事職務，由財務長 Colette Kress 暫代執行長。依報導，他在 11 月 8 日寄給全體員工的信中，承認自己與一名女子有婚外情。同一天，董事會宣布由獨立董事組成的委員會展開調查，並表示沒有理由相信公司機密或國家安全受到危害，對他仍有信心，預期他會繼續擔任執行長。四天後，他就辭職了，調查還沒有結論。
+
+報導也提到，對方被指與中國有關聯，美國聯邦調查局（FBI）已介入相關調查。這些指控目前都還沒有被證實。截至我撰寫這段時，我沒有看到官方公布任何調查結果。
+
+這件事讓我很震驚。一家市值這麼大的公司，執行長從「董事會有信心，會繼續任職」到辭職，只隔了四天，而且是在調查結束前。報導提到，有員工在內部意見箱要求董事會公布調查結果，並徵詢他們對他續任的看法。
+
+我覺得這件事很嚴重。但我說的嚴重，是指它對公司、股東與員工的影響，不是在替任何一方定罪。我不知道全部的事實，所以不判斷他有沒有過錯。
+
+如果要說我替誰說話，那只是我自己。一件影響這麼多人的事，應該等事實比較清楚，再做決定，而且結果要讓相關的人知道。
+
+如果之後調查有結果，我會回來更新這段文字。
+
+### 個人意見
+
+這一段是我個人的看法，和前面的技術內容無關。消息出來的時候，我一開始以為是假新聞，直到看到官方新聞稿才確定是真的，我非常驚訝。當天盤前股價一度下跌超過 10%，市場的反應很大。我寫下這段，只是為了記錄這件事確實發生過，以及它帶給我的衝擊。
+
+參考報導：
+
+- [中央社：黃仁勳辭去執行長　輝達盤前股價下殺逾10%](https://www.cna.com.tw/news/afe/202611120372.aspx)
+- [公視新聞網：輝達宣布黃仁勳辭職　財務長克雷斯接任臨時執行長](https://news.pts.org.tw/article/835526)
+- [聯合新聞網：「把老大請回來」！輝達員工聲援黃仁勳　追問調查未完為何先走人](https://udn.com/news/story/125066/9876841)
